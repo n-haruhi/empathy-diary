@@ -1,11 +1,53 @@
-import { Button } from './components/ui/Button';
-import { Input } from './components/ui/Input';
+import React, { useState } from 'react';
+import { AuthForm } from './components/features/AuthForm';
+import { useAuth } from './hooks/useAuth';
 
 function App() {
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
+  const { user, loading } = useAuth();
+
+  const toggleAuthMode = () => {
+    setAuthMode(authMode === 'login' ? 'signup' : 'login');
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto"></div>
+          <p className="mt-4 text-gray-600 dark:text-gray-400">読み込み中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (user) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+              おかえりなさい！
+            </h1>
+            <p className="mt-2 text-gray-600 dark:text-gray-400">
+              ようこそ、{user.email} さん
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-4 text-primary-600 hover:text-primary-700"
+            >
+              ログアウト（仮実装）
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-8">
-      <div className="max-w-md mx-auto space-y-6">
-        <div className="text-center">
+      <div className="max-w-md mx-auto">
+        <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
             Empathy Diary
           </h1>
@@ -14,23 +56,7 @@ function App() {
           </p>
         </div>
         
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
-          <div className="space-y-4">
-            <Input 
-              label="ユーザー名" 
-              placeholder="あなたの名前を入力してください"
-            />
-            <Input 
-              label="メールアドレス" 
-              type="email"
-              placeholder="email@example.com"
-            />
-            <div className="flex space-x-3">
-              <Button variant="primary">ログイン</Button>
-              <Button variant="outline">新規登録</Button>
-            </div>
-          </div>
-        </div>
+        <AuthForm mode={authMode} onToggleMode={toggleAuthMode} />
       </div>
     </div>
   );
