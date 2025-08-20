@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AuthForm } from './components/features/AuthForm';
+import { DiaryDashboard } from './components/features/DiaryDashboard';
 import { useAuth } from './hooks/useAuth';
 
 function App() {
@@ -21,29 +22,12 @@ function App() {
     );
   }
 
+  // ログイン済みの場合は日記ダッシュボードを表示
   if (user) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-8">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-              おかえりなさい！
-            </h1>
-            <p className="mt-2 text-gray-600 dark:text-gray-400">
-              ようこそ、{user.email} さん
-            </p>
-            <button
-              onClick={() => window.location.reload()}
-              className="mt-4 text-primary-600 hover:text-primary-700"
-            >
-              ログアウト（仮実装）
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+    return <DiaryDashboard />;
   }
 
+  // 未ログインの場合は認証画面を表示
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-8">
       <div className="max-w-md mx-auto">
