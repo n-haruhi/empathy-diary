@@ -3,6 +3,7 @@ import { LogOut, User } from 'lucide-react';
 import { Sidebar } from '../layout/Sidebar';
 import { DiaryForm } from './DiaryForm';
 import { DiaryList } from './DiaryList';
+import { DiaryDetail } from './DiaryDetail';
 import { AIChat } from './AIChat';
 import { Button } from '../ui/Button';
 import { useAuth } from '../../hooks/useAuth';
@@ -12,6 +13,7 @@ import type { DiaryEntry } from '../../types';
 export function MainLayout() {
   const [activeView, setActiveView] = useState<'diary' | 'chat'>('diary');
   const [showDiaryForm, setShowDiaryForm] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState<DiaryEntry | null>(null);
   const [entries, setEntries] = useState<DiaryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -72,21 +74,91 @@ export function MainLayout() {
     }
   };
 
+  // 日記を編集
+  const handleEditEntry = async (id: string, data: { title: string; content: string; emotions: string[] }) => {
+    setSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from('diary_entries')
+        .update({
+          encrypted_title: data.title,
+          encrypted_content: data.content,
+          emotion_tags: data.emotions,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error updating entry:', error);
+        alert('日記の更新に失敗しました。もう一度お試しください。');
+        return;
+      }
+
+      await fetchEntries();
+      setSelectedEntry(null);
+    } catch (error) {
+      console.error('Error:', error);
+      alert('予期しないエラーが発生しました。');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // 日記を削除
+  const handleDeleteEntry = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('diary_entries')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error deleting entry:', error);
+        alert('日記の削除に失敗しました。もう一度お試しください。');
+        return;
+      }
+
+      // 削除成功後、リストから該当のエントリを即座に削除
+      setEntries(prev => prev.filter(entry => entry.id !== id));
+      
+      // 詳細モーダルが開いている場合は閉じる
+      if (selectedEntry?.id === id) {
+        setSelectedEntry(null);
+      }
+      
+    } catch (error) {
+      console.error('Error:', error);
+      alert('予期しないエラーが発生しました。');
+    }
+  };
+
   // 日記の内容を引用してAIチャットを開始
   const handleQuoteDiary = (entry: DiaryEntry) => {
     setQuotedContent(entry.encrypted_content);
     setActiveView('chat');
   };
 
+  // 日記詳細からAIチャットを開始
+  const handleStartChatFromDetail = (content: string) => {
+    setQuotedContent(content);
+    setActiveView('chat');
+  };
+
   // 新しい日記作成
   const handleNewDiary = () => {
     setShowDiaryForm(true);
+    setSelectedEntry(null);
   };
 
   // 新しいチャット開始
   const handleNewChat = () => {
     setQuotedContent(undefined);
     setActiveView('chat');
+  };
+
+  // 日記エントリをクリック
+  const handleEntryClick = (entry: DiaryEntry) => {
+    setSelectedEntry(entry);
   };
 
   // AI会話を日記として保存
@@ -204,6 +276,7 @@ export function MainLayout() {
                   <DiaryList
                     entries={entries}
                     loading={loading}
+                    onEntryClick={handleEntryClick}
                   />
                 </div>
               )}
@@ -216,6 +289,17 @@ export function MainLayout() {
           )}
         </div>
       </div>
+
+      {/* 日記詳細モーダル */}
+      {selectedEntry && (
+        <DiaryDetail
+          entry={selectedEntry}
+          onClose={() => setSelectedEntry(null)}
+          onEdit={handleEditEntry}
+          onDelete={handleDeleteEntry}
+          onStartChat={handleStartChatFromDetail}
+        />
+      )}
     </div>
   );
 }
