@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AuthForm } from './components/features/AuthForm';
-import { DiaryDashboard } from './components/features/DiaryDashboard';
+import { MainLayout } from './components/features/MainLayout';
 import { useAuth } from './hooks/useAuth';
 
 function App() {
@@ -22,9 +22,9 @@ function App() {
     );
   }
 
-  // ログイン済みの場合は日記ダッシュボードを表示
+  // ログイン済みの場合は統合レイアウトを表示
   if (user) {
-    return <DiaryDashboard />;
+    return <MainLayout />;
   }
 
   // 未ログインの場合は認証画面を表示
