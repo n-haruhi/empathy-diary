@@ -1,20 +1,29 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { MessageSquare, BookOpen, RefreshCw } from 'lucide-react';
 import { ChatMessageComponent } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { generateChatResponse, type ChatMessage } from '../../lib/gemini';
+import { 
+  createChatSession, 
+  saveChatMessage, 
+  getChatMessages,
+  type ChatSession 
+} from '../../lib/chatHistory';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 
 interface AIChatProps {
   quotedContent?: string;
   onSaveAsDiary?: (content: string) => void;
+  selectedSession?: ChatSession | null;
+  onSessionChange?: (session: ChatSession | null) => void;
 }
 
-export function AIChat({ quotedContent, onSaveAsDiary }: AIChatProps) {
+export function AIChat({ quotedContent, onSaveAsDiary, selectedSession, onSessionChange }: AIChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentSession, setCurrentSession] = useState<ChatSession | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const initializingRef = useRef(false);
   const currentQuotedRef = useRef<string | undefined>(undefined);
@@ -28,18 +37,48 @@ export function AIChat({ quotedContent, onSaveAsDiary }: AIChatProps) {
     scrollToBottom();
   }, [messages]);
 
+  // 選択されたセッションが変更された時の処理
+  useEffect(() => {
+    if (selectedSession && selectedSession.id !== currentSession?.id) {
+      loadChatSession(selectedSession);
+    }
+  }, [selectedSession]);
+
+  // 会話セッションを読み込み
+  const loadChatSession = async (session: ChatSession) => {
+    try {
+      setCurrentSession(session);
+      setLoading(true);
+      
+      const sessionMessages = await getChatMessages(session.id);
+      setMessages(sessionMessages);
+      
+      // クリア状態をリセット
+      currentQuotedRef.current = undefined;
+      initializingRef.current = false;
+    } catch (error) {
+      console.error('Error loading chat session:', error);
+      setError('会話の読み込みに失敗しました');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // メッセージ送信処理
   const handleSendMessage = async (content: string, existingMessages?: ChatMessage[]) => {
     const currentMessages = existingMessages || messages;
     
     if (!content && !existingMessages) return;
+    if (!user) return;
 
     setLoading(true);
     setError(null);
 
     try {
       let newMessages = currentMessages;
-      
+      let sessionToUse = currentSession;
+
+      // 新しいユーザーメッセージを追加
       if (content) {
         const userMessage: ChatMessage = {
           role: 'user',
@@ -48,8 +87,23 @@ export function AIChat({ quotedContent, onSaveAsDiary }: AIChatProps) {
         };
         newMessages = [...currentMessages, userMessage];
         setMessages(newMessages);
+
+        // セッションがない場合は新規作成
+        if (!sessionToUse) {
+          sessionToUse = await createChatSession(user.id, content);
+          if (sessionToUse) {
+            setCurrentSession(sessionToUse);
+            onSessionChange?.(sessionToUse);
+          }
+        }
+
+        // メッセージをデータベースに保存
+        if (sessionToUse) {
+          await saveChatMessage(sessionToUse.id, 'user', content);
+        }
       }
 
+      // AI応答を生成
       const aiResponse = await generateChatResponse(newMessages);
       
       const aiMessage: ChatMessage = {
@@ -60,6 +114,11 @@ export function AIChat({ quotedContent, onSaveAsDiary }: AIChatProps) {
 
       setMessages(prev => [...prev, aiMessage]);
 
+      // AI応答もデータベースに保存
+      if (sessionToUse) {
+        await saveChatMessage(sessionToUse.id, 'assistant', aiResponse);
+      }
+
     } catch (err) {
       setError(err instanceof Error ? err.message : '予期しないエラーが発生しました');
     } finally {
@@ -69,14 +128,17 @@ export function AIChat({ quotedContent, onSaveAsDiary }: AIChatProps) {
 
   // 引用コンテンツの初期化
   useEffect(() => {
-    // 既に同じコンテンツで初期化中または完了している場合はスキップ
     if (initializingRef.current || currentQuotedRef.current === quotedContent) {
       return;
     }
 
-    if (quotedContent) {
+    if (quotedContent && user) {
       initializingRef.current = true;
       currentQuotedRef.current = quotedContent;
+      
+      // 既存のセッションをクリア
+      setCurrentSession(null);
+      onSessionChange?.(null);
       
       const quotedMessage: ChatMessage = {
         role: 'user',
@@ -86,10 +148,24 @@ export function AIChat({ quotedContent, onSaveAsDiary }: AIChatProps) {
       
       setMessages([quotedMessage]);
       
-      // AI応答を非同期で生成
-      const generateInitialResponse = async () => {
+      // 引用会話の初期化
+      const initializeQuotedConversation = async () => {
         try {
           setLoading(true);
+          
+          // 先にセッションを作成
+          const newSession = await createChatSession(user.id, quotedMessage.content);
+          if (!newSession) {
+            throw new Error('セッション作成に失敗しました');
+          }
+          
+          setCurrentSession(newSession);
+          onSessionChange?.(newSession);
+          
+          // ユーザーメッセージを先に保存
+          await saveChatMessage(newSession.id, 'user', quotedMessage.content);
+          
+          // AI応答を生成
           const aiResponse = await generateChatResponse([quotedMessage]);
           
           const aiMessage: ChatMessage = {
@@ -99,6 +175,10 @@ export function AIChat({ quotedContent, onSaveAsDiary }: AIChatProps) {
           };
 
           setMessages([quotedMessage, aiMessage]);
+
+          // AI応答を保存
+          await saveChatMessage(newSession.id, 'assistant', aiResponse);
+          
         } catch (err) {
           setError(err instanceof Error ? err.message : '予期しないエラーが発生しました');
         } finally {
@@ -107,14 +187,16 @@ export function AIChat({ quotedContent, onSaveAsDiary }: AIChatProps) {
         }
       };
 
-      generateInitialResponse();
+      initializeQuotedConversation();
     } else if (!quotedContent && currentQuotedRef.current) {
       // quotedContentがクリアされた場合はリセット
       setMessages([]);
+      setCurrentSession(null);
+      onSessionChange?.(null);
       currentQuotedRef.current = undefined;
       initializingRef.current = false;
     }
-  }, [quotedContent]);
+  }, [quotedContent, user, onSessionChange]);
 
   const handleCopyMessage = (content: string) => {
     navigator.clipboard.writeText(content);
@@ -155,6 +237,8 @@ export function AIChat({ quotedContent, onSaveAsDiary }: AIChatProps) {
   const handleNewConversation = () => {
     setMessages([]);
     setError(null);
+    setCurrentSession(null);
+    onSessionChange?.(null);
     initializingRef.current = false;
     currentQuotedRef.current = undefined;
   };
@@ -165,7 +249,7 @@ export function AIChat({ quotedContent, onSaveAsDiary }: AIChatProps) {
         <div className="flex items-center gap-3">
           <MessageSquare className="text-primary-500" size={24} />
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            AIとの会話
+            {currentSession?.title || 'AIとの会話'}
           </h2>
         </div>
         

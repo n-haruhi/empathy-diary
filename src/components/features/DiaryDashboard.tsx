@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, LogOut, User } from 'lucide-react';
 import { DiaryForm } from './DiaryForm';
 import { DiaryList } from './DiaryList';

@@ -1,4 +1,3 @@
-import React from 'react';
 import { User, Bot, Copy, BookOpen } from 'lucide-react';
 import { formatDate } from '../../utils';
 import type { ChatMessage } from '../../lib/gemini';

@@ -1,7 +1,7 @@
-import React from 'react';
-import { BookOpen, MessageSquare, Plus, Calendar } from 'lucide-react';
+import { BookOpen, MessageSquare, Plus, Calendar, Clock } from 'lucide-react';
 import { cn } from '../../utils';
 import type { DiaryEntry } from '../../types';
+import type { ChatSession } from '../../lib/chatHistory';
 
 interface SidebarProps {
   activeView: 'diary' | 'chat';
@@ -10,6 +10,9 @@ interface SidebarProps {
   onNewChat: () => void;
   diaryEntries: DiaryEntry[];
   onQuoteDiary: (entry: DiaryEntry) => void;
+  chatSessions: ChatSession[];
+  onSelectChatSession: (sessionId: string) => void;
+  activeChatSessionId?: string;
 }
 
 export function Sidebar({ 
@@ -18,7 +21,10 @@ export function Sidebar({
   onNewDiary, 
   onNewChat, 
   diaryEntries,
-  onQuoteDiary 
+  onQuoteDiary,
+  chatSessions,
+  onSelectChatSession,
+  activeChatSessionId
 }: SidebarProps) {
   return (
     <div className="w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col h-full">
@@ -133,13 +139,54 @@ export function Sidebar({
         <div className="flex-1 overflow-y-auto">
           <div className="p-4">
             <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-              <MessageSquare size={16} />
+              <Clock size={16} />
               会話履歴
             </h3>
             
-            <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-8">
-              会話履歴機能は今後実装予定です
-            </p>
+            {chatSessions.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-8">
+                まだ会話がありません
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {chatSessions.slice(0, 10).map((session) => (
+                  <div
+                    key={session.id}
+                    onClick={() => onSelectChatSession(session.id)}
+                    className={cn(
+                      'group p-3 rounded-lg border cursor-pointer transition-colors',
+                      activeChatSessionId === session.id
+                        ? 'border-primary-200 bg-primary-50 dark:border-primary-800 dark:bg-primary-900/20'
+                        : 'border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+                    )}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <h4 className="text-sm font-medium text-gray-900 dark:text-white line-clamp-1">
+                        {session.title}
+                      </h4>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 ml-2 flex-shrink-0">
+                        {new Date(session.updated_at).toLocaleDateString('ja-JP', { 
+                          month: 'short', 
+                          day: 'numeric' 
+                        })}
+                      </span>
+                    </div>
+                    
+                    {session.last_message && (
+                      <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2 mb-2">
+                        {session.last_message}
+                      </p>
+                    )}
+                    
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        {session.message_count} メッセージ
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

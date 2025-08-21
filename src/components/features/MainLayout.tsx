@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { LogOut, User } from 'lucide-react';
 import { Sidebar } from '../layout/Sidebar';
 import { DiaryForm } from './DiaryForm';
@@ -8,6 +8,7 @@ import { AIChat } from './AIChat';
 import { Button } from '../ui/Button';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../lib/supabase';
+import { getChatSessions, type ChatSession } from '../../lib/chatHistory';
 import type { DiaryEntry } from '../../types';
 
 export function MainLayout() {
@@ -15,6 +16,8 @@ export function MainLayout() {
   const [showDiaryForm, setShowDiaryForm] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<DiaryEntry | null>(null);
   const [entries, setEntries] = useState<DiaryEntry[]>([]);
+  const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
+  const [selectedChatSession, setSelectedChatSession] = useState<ChatSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [quotedContent, setQuotedContent] = useState<string | undefined>();
@@ -38,6 +41,17 @@ export function MainLayout() {
       console.error('Error:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // チャット履歴を取得
+  const fetchChatSessions = async () => {
+    if (!user) return;
+    try {
+      const sessions = await getChatSessions(user.id);
+      setChatSessions(sessions);
+    } catch (error) {
+      console.error('Error fetching chat sessions:', error);
     }
   };
 
@@ -118,10 +132,8 @@ export function MainLayout() {
         return;
       }
 
-      // 削除成功後、リストから該当のエントリを即座に削除
       setEntries(prev => prev.filter(entry => entry.id !== id));
       
-      // 詳細モーダルが開いている場合は閉じる
       if (selectedEntry?.id === id) {
         setSelectedEntry(null);
       }
@@ -135,12 +147,14 @@ export function MainLayout() {
   // 日記の内容を引用してAIチャットを開始
   const handleQuoteDiary = (entry: DiaryEntry) => {
     setQuotedContent(entry.encrypted_content);
+    setSelectedChatSession(null);
     setActiveView('chat');
   };
 
   // 日記詳細からAIチャットを開始
   const handleStartChatFromDetail = (content: string) => {
     setQuotedContent(content);
+    setSelectedChatSession(null);
     setActiveView('chat');
   };
 
@@ -153,12 +167,31 @@ export function MainLayout() {
   // 新しいチャット開始
   const handleNewChat = () => {
     setQuotedContent(undefined);
+    setSelectedChatSession(null);
     setActiveView('chat');
   };
 
   // 日記エントリをクリック
   const handleEntryClick = (entry: DiaryEntry) => {
     setSelectedEntry(entry);
+  };
+
+  // チャットセッション選択
+  const handleSelectChatSession = (sessionId: string) => {
+    const session = chatSessions.find(s => s.id === sessionId);
+    if (session) {
+      setSelectedChatSession(session);
+      setQuotedContent(undefined);
+    }
+  };
+
+  // チャットセッション変更時のコールバック
+  const handleSessionChange = (session: ChatSession | null) => {
+    if (session) {
+      setSelectedChatSession(session);
+      // 新しいセッションが作成された場合、履歴を更新
+      fetchChatSessions();
+    }
   };
 
   // AI会話を日記として保存
@@ -198,7 +231,8 @@ export function MainLayout() {
 
   useEffect(() => {
     fetchEntries();
-  }, []);
+    fetchChatSessions();
+  }, [user]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col">
@@ -243,6 +277,9 @@ export function MainLayout() {
           onNewChat={handleNewChat}
           diaryEntries={entries}
           onQuoteDiary={handleQuoteDiary}
+          chatSessions={chatSessions}
+          onSelectChatSession={handleSelectChatSession}
+          activeChatSessionId={selectedChatSession?.id}
         />
 
         {/* メインエリア */}
@@ -285,6 +322,8 @@ export function MainLayout() {
             <AIChat
               quotedContent={quotedContent}
               onSaveAsDiary={handleSaveAsDiary}
+              selectedSession={selectedChatSession}
+              onSessionChange={handleSessionChange}
             />
           )}
         </div>
